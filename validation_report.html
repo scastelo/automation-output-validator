@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Automation Output Validator — Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg:      #0a0e1a;
+    --surface: #111827;
+    --border:  #1f2d40;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    --accent:  #38bdf8;
+    --crit:    #ef4444;
+    --warn:    #f59e0b;
+    --ok:      #22c55e;
+    --info:    #6366f1;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  /* ── grid noise texture ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(56,189,248,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56,189,248,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; }
+
+  /* ── header ── */
+  header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    border-bottom: 1px solid var(--border); padding-bottom: 2rem; margin-bottom: 2.5rem;
+  }
+  .logo-block { display: flex; align-items: center; gap: 1rem; }
+  .logo-icon {
+    width: 48px; height: 48px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem;
+  }
+  h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
+  .subtitle { color: var(--muted); font-size: .85rem; margin-top: .2rem; font-family: 'IBM Plex Mono', monospace; }
+  .meta { text-align: right; color: var(--muted); font-size: .8rem; font-family: 'IBM Plex Mono', monospace; line-height: 1.8; }
+
+  /* ── KPI cards ── */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 1rem; margin-bottom: 2rem;
+  }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.25rem 1.5rem;
+    position: relative; overflow: hidden;
+  }
+  .kpi::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--accent-line, var(--accent));
+  }
+  .kpi-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: .5rem; }
+  .kpi-value { font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 600; line-height: 1; }
+  .kpi-sub { font-size: .75rem; color: var(--muted); margin-top: .4rem; }
+
+  /* ── health score ── */
+  .health-block {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 1.5rem;
+    display: flex; align-items: center; gap: 2rem;
+    margin-bottom: 2rem;
+  }
+  .score-ring { flex-shrink: 0; }
+  .score-ring circle { transition: stroke-dasharray 1s ease; }
+  .score-label { font-family: 'IBM Plex Mono', monospace; }
+  .score-label .big { font-size: 1.8rem; font-weight: 600; }
+  .score-label .tag { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+  .sev-bars { flex: 1; display: flex; flex-direction: column; gap: .6rem; }
+  .sev-row { display: flex; align-items: center; gap: .75rem; font-size: .85rem; }
+  .sev-name { width: 70px; font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; }
+  .bar-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+  .sev-count { width: 30px; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: .8rem; }
+
+  /* ── sections ── */
+  section { margin-bottom: 2rem; }
+  .section-title {
+    font-size: .7rem; text-transform: uppercase; letter-spacing: .15em;
+    color: var(--accent); margin-bottom: 1rem;
+    display: flex; align-items: center; gap: .5rem;
+  }
+  .section-title::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+
+  /* ── table ── */
+  .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  thead tr { background: #0d1524; }
+  th {
+    padding: .75rem 1rem; text-align: left;
+    font-size: .65rem; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); font-weight: 500; white-space: nowrap;
+  }
+  td { padding: .7rem 1rem; border-top: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(56,189,248,.03); }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  .small { font-size: .75rem; }
+  .badge {
+    display: inline-block; padding: .2em .55em; border-radius: 4px;
+    font-size: .68rem; font-weight: 600; letter-spacing: .04em;
+    text-transform: uppercase; white-space: nowrap;
+  }
+
+  /* ── category chips ── */
+  .chip-grid { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 2rem; }
+  .chip {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: .6rem 1.1rem;
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 140px;
+  }
+  .chip-count { font-family: 'IBM Plex Mono', monospace; font-size: 1.6rem; font-weight: 600; }
+  .chip-name { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-top: .2rem; }
+
+  /* ── footer ── */
+  footer {
+    margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: .75rem; font-family: 'IBM Plex Mono', monospace;
+    display: flex; justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="logo-block">
+      <div class="logo-icon">🔍</div>
+      <div>
+        <h1>Automation Output Validator</h1>
+        <div class="subtitle">validation-report v1.0 · data/automation_output.csv</div>
+      </div>
+    </div>
+    <div class="meta">
+      <div>Run: 2026-05-11 09:31:37</div>
+      <div>Records: 20</div>
+      <div>Issues found: 17</div>
+    </div>
+  </header>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi" style="--accent-line:#ef4444">
+      <div class="kpi-label">Health Score</div>
+      <div class="kpi-value" style="color:#ef4444">0</div>
+      <div class="kpi-sub">out of 100</div>
+    </div>
+    <div class="kpi" style="--accent-line:var(--ok)">
+      <div class="kpi-label">Pass Rate</div>
+      <div class="kpi-value" style="color:var(--ok)">40.0%</div>
+      <div class="kpi-sub">8 clean records</div>
+    </div>
+    <div class="kpi" style="--accent-line:var(--crit)">
+      <div class="kpi-label">Critical</div>
+      <div class="kpi-value" style="color:var(--crit)">11</div>
+      <div class="kpi-sub">issues requiring action</div>
+    </div>
+    <div class="kpi" style="--accent-line:var(--warn)">
+      <div class="kpi-label">Warnings</div>
+      <div class="kpi-value" style="color:var(--warn)">6</div>
+      <div class="kpi-sub">issues to review</div>
+    </div>
+    <div class="kpi" style="--accent-line:var(--info)">
+      <div class="kpi-label">Affected Records</div>
+      <div class="kpi-value" style="color:var(--info)">12</div>
+      <div class="kpi-sub">of 20 total</div>
+    </div>
+  </div>
+
+  <!-- Health Score + Severity Bars -->
+  <div class="health-block">
+    <div class="score-ring">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#1f2d40" stroke-width="8"/>
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#ef4444" stroke-width="8"
+          stroke-dasharray="0.0 251.327"
+          stroke-linecap="round"
+          transform="rotate(-90 50 50)"/>
+        <text x="50" y="55" text-anchor="middle" fill="#ef4444"
+          font-family="IBM Plex Mono" font-size="18" font-weight="600">0</text>
+      </svg>
+    </div>
+    <div class="score-label">
+      <div class="tag">System Health</div>
+      <div class="big" style="color:#ef4444">Critical</div>
+    </div>
+    <div class="sev-bars">
+      <div class="sev-row">
+        <span class="sev-name" style="color:var(--crit)">Critical</span>
+        <div class="bar-track"><div class="bar-fill" style="width:65%;background:var(--crit)"></div></div>
+        <span class="sev-count">11</span>
+      </div>
+      <div class="sev-row">
+        <span class="sev-name" style="color:var(--warn)">Warning</span>
+        <div class="bar-track"><div class="bar-fill" style="width:35%;background:var(--warn)"></div></div>
+        <span class="sev-count">6</span>
+      </div>
+      <div class="sev-row">
+        <span class="sev-name" style="color:var(--info)">Info</span>
+        <div class="bar-track"><div class="bar-fill" style="width:0%;background:var(--info)"></div></div>
+        <span class="sev-count">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Issue Categories -->
+  <section>
+    <div class="section-title">Issue Breakdown by Category</div>
+    <div class="chip-grid">
+      <div class="chip"><span class="chip-count">7</span><span class="chip-name">MISSING VALUE</span></div><div class="chip"><span class="chip-count">3</span><span class="chip-name">INCONSISTENCY</span></div><div class="chip"><span class="chip-count">2</span><span class="chip-name">LOGIC FAILURE</span></div><div class="chip"><span class="chip-count">5</span><span class="chip-name">THRESHOLD BREACH</span></div>
+    </div>
+  </section>
+
+  <!-- Full Issues Table -->
+  <section>
+    <div class="section-title">All Validation Issues (17)</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Record ID</th>
+            <th>Severity</th>
+            <th>Category</th>
+            <th>Rule</th>
+            <th>Field</th>
+            <th>Description</th>
+            <th>Actual Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+        <tr>
+          <td class="mono">1003</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>◯ MISSING_VALUE</td>
+          <td class="mono small">REQUIRED_FIELD_MISSING</td>
+          <td class="mono small">output_value</td>
+          <td>Required field 'output_value' is null or empty.</td>
+          <td class="mono small">nan</td>
+        </tr>
+        <tr>
+          <td class="mono">1010</td>
+          <td><span class="badge" style="background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40">WARNING</span></td>
+          <td>◯ MISSING_VALUE</td>
+          <td class="mono small">UNASSIGNED_RECORD</td>
+          <td class="mono small">assigned_to</td>
+          <td>Record has no assigned owner.</td>
+          <td class="mono small">—</td>
+        </tr>
+        <tr>
+          <td class="mono">1012</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>◯ MISSING_VALUE</td>
+          <td class="mono small">REQUIRED_FIELD_MISSING</td>
+          <td class="mono small">output_value</td>
+          <td>Required field 'output_value' is null or empty.</td>
+          <td class="mono small">nan</td>
+        </tr>
+        <tr>
+          <td class="mono">1018</td>
+          <td><span class="badge" style="background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40">WARNING</span></td>
+          <td>◯ MISSING_VALUE</td>
+          <td class="mono small">UNASSIGNED_RECORD</td>
+          <td class="mono small">assigned_to</td>
+          <td>Record has no assigned owner.</td>
+          <td class="mono small">—</td>
+        </tr>
+        <tr>
+          <td class="mono">1020</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>◯ MISSING_VALUE</td>
+          <td class="mono small">REQUIRED_FIELD_MISSING</td>
+          <td class="mono small">status</td>
+          <td>Required field 'status' is null or empty.</td>
+          <td class="mono small">nan</td>
+        </tr>
+        <tr>
+          <td class="mono">1020</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>⚠ INCONSISTENCY</td>
+          <td class="mono small">INVALID_STATUS</td>
+          <td class="mono small">status</td>
+          <td>Status 'nan' is not a recognised value.</td>
+          <td class="mono small">nan</td>
+        </tr>
+        <tr>
+          <td class="mono">1006</td>
+          <td><span class="badge" style="background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40">WARNING</span></td>
+          <td>◯ MISSING_VALUE</td>
+          <td class="mono small">MISSING_END_TIME</td>
+          <td class="mono small">end_time</td>
+          <td>Successful record is missing end_time.</td>
+          <td class="mono small">—</td>
+        </tr>
+        <tr>
+          <td class="mono">1009</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>⚡ LOGIC_FAILURE</td>
+          <td class="mono small">END_BEFORE_START</td>
+          <td class="mono small">end_time</td>
+          <td>end_time (2024-01-15 10:55:00) is not after start_time (2024-01-15 11:05:00).</td>
+          <td class="mono small">2024-01-15 10:55:00</td>
+        </tr>
+        <tr>
+          <td class="mono">1015</td>
+          <td><span class="badge" style="background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40">WARNING</span></td>
+          <td>◯ MISSING_VALUE</td>
+          <td class="mono small">MISSING_EXPECTED_COUNT</td>
+          <td class="mono small">records_expected</td>
+          <td>records_expected is not set; cannot verify completeness.</td>
+          <td class="mono small">1200</td>
+        </tr>
+        <tr>
+          <td class="mono">1005</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>⬆ THRESHOLD_BREACH</td>
+          <td class="mono small">ABOVE_THRESHOLD</td>
+          <td class="mono small">output_value</td>
+          <td>Output value 15000.0 exceeds maximum threshold 10000.0.</td>
+          <td class="mono small">15000.0</td>
+        </tr>
+        <tr>
+          <td class="mono">1007</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>⬆ THRESHOLD_BREACH</td>
+          <td class="mono small">BELOW_THRESHOLD</td>
+          <td class="mono small">output_value</td>
+          <td>Output value -50.0 is below minimum threshold 200.0.</td>
+          <td class="mono small">-50.0</td>
+        </tr>
+        <tr>
+          <td class="mono">1008</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>⬆ THRESHOLD_BREACH</td>
+          <td class="mono small">BELOW_THRESHOLD</td>
+          <td class="mono small">output_value</td>
+          <td>Output value 0.0 is below minimum threshold 500.0.</td>
+          <td class="mono small">0.0</td>
+        </tr>
+        <tr>
+          <td class="mono">1010</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>⬆ THRESHOLD_BREACH</td>
+          <td class="mono small">BELOW_THRESHOLD</td>
+          <td class="mono small">output_value</td>
+          <td>Output value 99.5 is below minimum threshold 100.0.</td>
+          <td class="mono small">99.5</td>
+        </tr>
+        <tr>
+          <td class="mono">1017</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>⬆ THRESHOLD_BREACH</td>
+          <td class="mono small">BELOW_THRESHOLD</td>
+          <td class="mono small">output_value</td>
+          <td>Output value 1.0 is below minimum threshold 100.0.</td>
+          <td class="mono small">1.0</td>
+        </tr>
+        <tr>
+          <td class="mono">1007</td>
+          <td><span class="badge" style="background:#ef444420;color:#ef4444;border:1px solid #ef444440">CRITICAL</span></td>
+          <td>⚡ LOGIC_FAILURE</td>
+          <td class="mono small">NEGATIVE_OUTPUT</td>
+          <td class="mono small">output_value</td>
+          <td>Output value is negative (-50.0), which is logically invalid.</td>
+          <td class="mono small">-50.0</td>
+        </tr>
+        <tr>
+          <td class="mono">1012</td>
+          <td><span class="badge" style="background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40">WARNING</span></td>
+          <td>⚠ INCONSISTENCY</td>
+          <td class="mono small">INVALID_REGION</td>
+          <td class="mono small">region</td>
+          <td>Region 'UNKNOWN' is not a valid region code.</td>
+          <td class="mono small">UNKNOWN</td>
+        </tr>
+        <tr>
+          <td class="mono">1015</td>
+          <td><span class="badge" style="background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40">WARNING</span></td>
+          <td>⚠ INCONSISTENCY</td>
+          <td class="mono small">INVALID_REGION</td>
+          <td class="mono small">region</td>
+          <td>Region 'nan' is not a valid region code.</td>
+          <td class="mono small">nan</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <span>Automation Output Validator · generated 2026-05-11 09:31:37</span>
+    <span>17 issues · 20 records</span>
+  </footer>
+
+</div>
+</body>
+</html>
